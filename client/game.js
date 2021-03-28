@@ -16,32 +16,17 @@ const CONSTANTS = {
     PLAYER_COLOUR: '#1F271B',
     PLAYER_HEIGHT: 20,
     PLAYER_WIDTH: 20,
-    TERRAIN_COLOUR: '',
-    GRAVITY: 80,
-    MAX_VELOCITY: 3000,
+    GRAVITY: 70,
+    MAX_VELOCITY: 1000,
     DELTA_CEILING: 0.0167,
     DELTA_FLOOR: 0.1,
-    JUMP_SPEED: 1200,
+    JUMP_SPEED: 800,
 }
 
 const GAME_STATES = {
     WON: 1,
     PLAYING: 2,
     LOST: 3,
-}
-
-const player = {
-    width: CONSTANTS.PLAYER_WIDTH,
-    height: CONSTANTS.PLAYER_HEIGHT,
-    position: {
-        x: 10,
-        y: 10,
-    },
-    velocity: {
-        x: 0,
-        y: 0,
-    },
-    score: 0,
 }
 
 const game = {
@@ -58,27 +43,40 @@ const KEYCODES = {
     JUMP: 32,
 }
 
-let platforms = []
+class Player {
+    constructor(x, y, width, height) {
+        this.height = height
+        this.width = width
+        this.x = x
+        this.y = y
+        this.velocity = {
+            x: 0,
+            y: 0,
+        }
+        this.score = 0
+        this.isJumping = false
+    }
+}
 
 class Platform {
     constructor(x, y, width, height) {
         this.height = height
         this.width = width
-        this.position = {
-            x,
-            y,
-        }
+        this.x = x
+        this.y = y
         this.velocity = 400
     }
 }
 
-let canvas, context, animationFrameRequestId
+let canvas, context, animationFrameRequestId, player
+let platforms = []
 
 function initialise() {
     canvas = document.getElementById('canvas')
     context = canvas.getContext('2d')
 
     canvas.width = canvas.height = CONSTANTS.CANVAS_WIDTH
+    startMusic()
 
     cleanStartGameLoop()
 }
@@ -88,11 +86,10 @@ function cleanStartGameLoop() {
     document.removeEventListener('keydown', handleRestart)
     registerEventListeners()
 
-    player.score = 0
+    player = new Player(50, 30, CONSTANTS.PLAYER_WIDTH, CONSTANTS.PLAYER_HEIGHT)
     platforms = []
-    platforms.push(new Platform(0, 320, 350, 50))
-    platforms.push(new Platform(410, 300, 350, 50))
-    player.position = { x: 30, y: 30 }
+    platforms.push(new Platform(0, 320, 250, 50))
+    platforms.push(new Platform(370, 300, 250, 50))
 
     game.state = GAME_STATES.PLAYING
 
@@ -106,6 +103,7 @@ function update() {
     draw()
     updateGameState()
     updateScore()
+    handleCollisions()
 
     if (game.state === GAME_STATES.LOST) {
         return endGame()
@@ -117,45 +115,37 @@ function update() {
     updateDeltaTime()
 }
 
-/**
- * Messy mess of a mess
- */
 function calculateMovement() {
     movePlayer()
     movePlatforms()
 }
 
-function movePlayer() {
-    const playerVelocity = player.velocity
+function handleCollisions() {
+    if (isColliding(player, platforms) && !player.isJumping) {
+        player.isColliding = true
+        player.velocity.y = -player.velocity.y / 2
+    }
+}
 
-    if (playerVelocity.y > 0) {
+function movePlayer() {
+    if (player.velocity.y > 0) {
         player.isJumping = false
     }
 
-    if (isColliding(player, platforms) && !player.isJumping) {
-        player.isColliding = true
-        if (playerVelocity.y < 0.01) {
-            playerVelocity.y = 0
-        } else {
-            playerVelocity.y = -playerVelocity.y / 3
-        }
-    } else if (playerVelocity.y < CONSTANTS.MAX_VELOCITY) {
-        playerVelocity.y += CONSTANTS.GRAVITY
+    if (player.velocity.y < CONSTANTS.MAX_VELOCITY) {
+        player.velocity.y += CONSTANTS.GRAVITY
     }
 
-    playerVelocity.y = Math.min(playerVelocity.y, CONSTANTS.MAX_VELOCITY)
-
-    const playerPosition = player.position
-
-    playerPosition.y += playerVelocity.y * DELTA.value
+    player.velocity.y = Math.min(player.velocity.y, CONSTANTS.MAX_VELOCITY)
+    player.y += player.velocity.y * DELTA.value
 }
 
 function movePlatforms() {
     platforms.forEach((platform) => {
-        if (platform.position.x + platform.width < 0) {
-            platform.position.x = canvas.width
+        if (platform.x + platform.width < 0) {
+            platform.x = canvas.width
         }
-        platform.position.x -= platform.velocity * DELTA.value
+        platform.x -= platform.velocity * DELTA.value
     })
 }
 
@@ -166,8 +156,8 @@ function draw() {
     platforms.forEach((platform) => {
         context.fillStyle = CONSTANTS.PLATFORM_COLOUR
         context.fillRect(
-            platform.position.x,
-            platform.position.y,
+            platform.x,
+            platform.y,
             platform.width,
             platform.height
         )
@@ -175,8 +165,8 @@ function draw() {
 
     context.fillStyle = CONSTANTS.PLAYER_COLOUR
     context.fillRect(
-        player.position.x,
-        player.position.y,
+        player.x,
+        player.y,
         CONSTANTS.PLAYER_WIDTH,
         CONSTANTS.PLAYER_HEIGHT
     )
@@ -204,7 +194,7 @@ function handleKeydown(e) {
 }
 
 function jump() {
-    if (player.position.y > 0 && player.isColliding) {
+    if (player.y > 0 && player.isColliding) {
         player.isJumping = true
         player.isColliding = false
         player.velocity.y = -CONSTANTS.JUMP_SPEED
@@ -212,7 +202,7 @@ function jump() {
 }
 
 function updateGameState() {
-    if (player.position.y > canvas.height) {
+    if (player.y > canvas.height) {
         game.state = GAME_STATES.LOST
     }
 }
@@ -231,20 +221,28 @@ function endGame() {
     context.font = '24px Tahoma'
     context.fillStyle = 'white'
     context.fillText('game over', canvas.width / 2, canvas.height / 2)
+    context.font = '16px Tahoma'
+    context.fillText('<press space>', canvas.width / 2, canvas.height / 2 + 50)
     document.addEventListener('keydown', handleRestart)
 }
 
 function isColliding(player, platforms) {
-    return platforms.some((platform) => {
-        return performAABBTest(
-            { ...player.position, width: player.width, height: player.height },
+    for (let i = 0; i < platforms.length; i++) {
+        const collision = performAABBTest(
+            { ...player, width: player.width, height: player.height },
             {
-                ...platform.position,
-                width: platform.width,
-                height: platform.height,
+                x: platforms[i].x,
+                y: platforms[i].y,
+                width: platforms[i].width,
+                height: platforms[i].height,
             }
         )
-    })
+
+        if (collision) {
+            player.y = platforms[i].y - player.height
+            return platforms[i]
+        }
+    }
 
     function performAABBTest(rectA, rectB) {
         return (
@@ -264,6 +262,10 @@ function renderScore() {
 
 function updateScore() {
     player.score++
+}
+
+function startMusic() {
+    // todo
 }
 
 initialise()
