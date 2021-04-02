@@ -32,6 +32,7 @@ const GAME_STATES = {
 const game = {
     fps: 0,
     state: GAME_STATES.IDLE,
+    bestScore: 0,
 }
 
 const DELTA = {
@@ -74,6 +75,7 @@ class Player extends GameObject {
             y: 0,
         }
         this.score = 0
+        this.bestScore = 0
         this.isJumping = false
         this.jumps = CONSTANTS.MAX_JUMPS
     }
@@ -130,6 +132,7 @@ function update() {
         updateGameState()
         updateScore()
         handleCollisions()
+        scaleDifficultyByScore()
 
         if (game.state === GAME_STATES.LOST) {
             return endGame()
@@ -241,6 +244,7 @@ function updateGameState() {
 }
 
 function endGame() {
+    setBestScore()
     renderGameOverScreen()
 }
 
@@ -256,6 +260,10 @@ function isColliding(player, platforms) {
 
     const collidedFromLeft = (rectA, rectB) => {
         return rectA.x + rectA.width < rectB.oldX
+    }
+
+    const collidedFromBottom = (rectA, rectB) => {
+        return rectA.oldY > rectB.y + rectB.height
     }
 
     for (let i = 0; i < platforms.length; i++) {
@@ -276,8 +284,15 @@ function isColliding(player, platforms) {
 
         if (collision) {
             const leftCollision = collidedFromLeft(playerRect, platformRect)
+
             if (leftCollision) {
                 return (player.velocity.x = -1000)
+            }
+
+            const bottomCollision = collidedFromBottom(playerRect, platformRect)
+
+            if (bottomCollision) {
+                return (player.velocity.y = 1000)
             }
 
             player.jumps = CONSTANTS.MAX_JUMPS
@@ -308,7 +323,9 @@ function renderGameOverScreen() {
     context.font = '16px Tahoma'
     context.fillText(`score: ${player.score}`, canvas.width / 2, canvas.height / 2)
     context.font = '16px Tahoma'
-    context.fillText('[press space]', canvas.width / 2, canvas.height / 1.5)
+    context.fillText(`best: ${game.bestScore}`, canvas.width / 2, canvas.height / 1.75)
+    context.font = '16px Tahoma'
+    context.fillText('press space or touch ( ͡° ͜ʖ ͡°)', canvas.width / 2, canvas.height / 1.5)
 }
 
 function drawFps() {
@@ -321,6 +338,7 @@ function drawScore() {
     context.font = '14px Tahoma'
     context.fillStyle = 'black'
     context.fillText(`score: ${player.score}`, 50, 20)
+    context.fillText(`best: ${game.bestScore}`, canvas.width - 40, 20)
 }
 
 function drawHUD() {
@@ -338,6 +356,20 @@ function startMusic() {
 
 function getRandomArbitrary(min, max) {
     return Math.random() * (max - min) + min
+}
+
+function scaleDifficultyByScore() {
+    const threshold = 400
+    const velocityIncease = 70
+    if (player.score % threshold === 0) {
+        platforms.forEach((platform) => (platform.velocity += velocityIncease))
+    }
+}
+
+function setBestScore() {
+    if (player.score > game.bestScore) {
+        game.bestScore = player.score
+    }
 }
 
 initialise()
