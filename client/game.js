@@ -3,8 +3,9 @@
 /**
  * todo:
  * 1. promote movement to objects
- * 2. cleanup collision logic
- * 3. develop directional collision detection
+ * 2. interesting platform spawns
+ * 3. create platform prop class
+ * 4. impl double jump
  */
 
 const CONSTANTS = {
@@ -18,6 +19,7 @@ const CONSTANTS = {
     GRAVITY: 2500,
     MAX_VELOCITY: 1200,
     JUMP_SPEED: 600,
+    MAX_JUMPS: 2,
 }
 
 const GAME_STATES = {
@@ -73,6 +75,7 @@ class Player extends GameObject {
         }
         this.score = 0
         this.isJumping = false
+        this.jumps = CONSTANTS.MAX_JUMPS
     }
 }
 
@@ -197,7 +200,7 @@ function updateDeltaTime() {
 
 function registerEventListeners() {
     document.addEventListener('keydown', handleKeydown)
-    document.addEventListener('touchstart', handleTouch)
+    document.addEventListener('touchstart', handleTouchStart)
 }
 
 function handleKeydown(e) {
@@ -212,7 +215,7 @@ function handleKeydown(e) {
     }
 }
 
-function handleTouch(e) {
+function handleTouchStart(_e) {
     if (game.state === GAME_STATES.PLAYING) {
         return jump()
     }
@@ -223,10 +226,11 @@ function handleTouch(e) {
 }
 
 function jump() {
-    if (player.y > 0 && player.isColliding) {
+    if (player.y > 0 && player.jumps > 0) {
         player.isJumping = true
         player.isColliding = false
         player.velocity.y = -CONSTANTS.JUMP_SPEED
+        player.jumps--
     }
 }
 
@@ -275,6 +279,8 @@ function isColliding(player, platforms) {
             if (leftCollision) {
                 return (player.velocity.x = -1000)
             }
+
+            player.jumps = CONSTANTS.MAX_JUMPS
             return (player.y = platforms[i].y - player.height)
         }
     }
