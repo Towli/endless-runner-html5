@@ -12,7 +12,6 @@ const CONSTANTS = {
     BG_COLOUR: '#28AFB0',
     PLATFORM_COLOUR: '#EE964B',
     PLAYER_COLOUR: '#1F271B',
-    // PLAYER_COLOUR: 'white',
     PLAYER_HEIGHT: 60,
     PLAYER_WIDTH: 60,
     GRAVITY: 0.002,
@@ -46,11 +45,16 @@ class GameObject {
         this.y = y
         this.height = height
         this.width = width
+        this.spriteSet = {}
     }
 
     draw() {
         this.context.fillStyle = this.colour
         this.context.fillRect(this.x, this.y, this.width, this.height)
+    }
+
+    setSprite(label, sprite) {
+        this.spriteSet[label] = sprite
     }
 }
 
@@ -71,11 +75,15 @@ class Player extends GameObject {
         this.jumps = CONSTANTS.MAX_JUMPS
         this.sprite = null
         this.currentFrame = 0
-        this.spriteSet = {}
+        this.animationSpeed = 0.4
     }
 
     move() {
         if (this.velocity.y > 0) {
+            if (this.isJumping) {
+                this.currentFrame = 0
+            }
+
             this.isJumping = false
             this.isFalling = true
         } else {
@@ -93,34 +101,37 @@ class Player extends GameObject {
     }
 
     draw() {
-        this.context.fillStyle = 'white'
-        this.context.font = '16px Tahoma'
-        context.fillText(`baz`, this.x + 30, this.y - 10)
         this.drawSprite()
     }
 
-    setSprite(label, sprite) {
-        this.spriteSet[label] = sprite
-    }
+    // refactor this garbo
+    drawSprite() {
+        let currentSprite = this.spriteSet['run']
+        let numFrames = 6
 
-    _getCurrentSprite() {
-        if (this.isJumping || this.isFalling) {
-            return this.spriteSet['jump']
+        if (this.isJumping) {
+            currentSprite = this.spriteSet['jump']
+            numFrames = 3
         }
 
-        return this.spriteSet['run']
-    }
-
-    drawSprite(delta) {
-        const currentSprite = this._getCurrentSprite()
-
-        if (this.currentFrame >= 6) {
-            this.currentFrame = 0
+        if (this.isFalling) {
+            currentSprite = this.spriteSet['fall']
+            numFrames = 3
         }
 
-        const width = currentSprite.width / 6
+        if (this.currentFrame >= numFrames) {
+            if (this.isFalling || this.isJumping) {
+                this.currentFrame = numFrames - 1
+            } else {
+                this.currentFrame = 0
+            }
+        }
+
+        this.isJumping && console.log(this.currentFrame)
+
+        const width = currentSprite.width / numFrames
         const height = currentSprite.height
-        const sourceX = this.currentFrame * width
+        const sourceX = Math.floor(this.currentFrame) * width
         const sourceY = 15 // hardcoded offset for good clipping, temp..
 
         this.context.drawImage(
@@ -135,7 +146,7 @@ class Player extends GameObject {
             this.height
         )
 
-        this.currentFrame++
+        this.currentFrame += 0.3
     }
 }
 
@@ -163,11 +174,21 @@ class Platform extends GameObject {
     }
 
     draw() {
-        this.context.fillStyle = this.colour
-        this.context.fillRect(this.x, this.y, this.width, this.height)
-        this.context.fillStyle = 'black'
-        this.context.font = '16px Tahoma'
-        context.fillText(`footlong`, this.x + this.width / 2, this.y + 25)
+        this.drawSprite()
+        // this.context.fillStyle = this.colour
+        // this.context.fillRect(this.x, this.y, this.width, this.height)
+        // this.context.fillStyle = 'black'
+        // this.context.font = '16px Tahoma'
+        // context.fillText(`footlong`, this.x + this.width / 2, this.y + 25)
+    }
+
+    drawSprite() {
+        const sprite = this.spriteSet['tile']
+
+        const width = sprite.width
+        const height = sprite.height
+
+        this.context.drawImage(sprite, this.x, this.y, this.width, this.height)
     }
 }
 
@@ -192,11 +213,13 @@ let canvas,
     platforms = [],
     runSprite,
     jumpSprite,
+    fallSprite,
+    platformSprite,
     lastFrameTimeInMs = 0,
     maxFPS = 10,
     delta = 0
 
-const timestep = 1000 / 60 //
+const timestep = 1000 / 60 // timesteps of 60fps
 
 function initialise() {
     canvas = document.getElementById('canvas')
@@ -216,7 +239,19 @@ function initialise() {
     jumpSprite = new Image()
     jumpSprite.src = 'assets/woodcutter/jump.png'
 
-    loadImages([backdrop.first.image, backdrop.second.image, runSprite, jumpSprite]).then(() => {
+    fallSprite = new Image()
+    fallSprite.src = 'assets/woodcutter/fall.png'
+
+    platformSprite = new Image()
+    platformSprite.src = 'assets/city/platform_tile.png'
+
+    loadImages([
+        backdrop.first.image,
+        backdrop.second.image,
+        runSprite,
+        jumpSprite,
+        platformSprite,
+    ]).then(() => {
         registerEventListeners()
         renderMenuScreen()
     })
@@ -230,10 +265,24 @@ function cleanStartGameLoop() {
     player = new Player(context, 50, 30, CONSTANTS.PLAYER_WIDTH, CONSTANTS.PLAYER_HEIGHT)
     player.setSprite('run', runSprite)
     player.setSprite('jump', jumpSprite)
+    player.setSprite('fall', fallSprite)
+
+    const numPlatforms = 4
 
     platforms = []
-    platforms.push(new Platform(context, 50, getRandomArbitrary(400, canvas.height - 50), 270, 50))
-    platforms.push(new Platform(context, 400, getRandomArbitrary(400, canvas.height - 50), 270, 50))
+
+    for (let i = 0; i < numPlatforms; i++) {
+        const platform = new Platform(
+            context,
+            i * canvas.width,
+            getRandomArbitrary(400, canvas.height - 50),
+            getRandomArbitrary(100, 300),
+            50
+        )
+
+        platform.setSprite('tile', platformSprite)
+        platforms.push(platform)
+    }
 
     game.state = GAME_STATES.PLAYING
 
@@ -336,7 +385,9 @@ function handleTouchStart(_e) {
 function jump() {
     if (player.y > 0 && player.jumps > 0) {
         player.isJumping = true
+        player.isFalling = false
         player.isColliding = false
+        player.currentFrame = 0
         player.velocity.y = -CONSTANTS.JUMP_SPEED
         player.jumps--
     }
@@ -475,6 +526,7 @@ function scaleDifficultyByScore() {
     if (player.score % threshold === 0) {
         platforms.forEach((platform) => (platform.velocity += velocityIncease))
     }
+    player.animationSpeed += 0.1
 }
 
 function setBestScore() {
