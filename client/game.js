@@ -15,11 +15,9 @@ const CONSTANTS = {
     PLAYER_COLOUR: '#1F271B',
     PLAYER_HEIGHT: 20,
     PLAYER_WIDTH: 20,
-    GRAVITY: 70,
+    GRAVITY: 2500,
     MAX_VELOCITY: 1200,
-    DELTA_CEILING: 0.0167,
-    DELTA_FLOOR: 0.1,
-    JUMP_SPEED: 1000,
+    JUMP_SPEED: 600,
 }
 
 const GAME_STATES = {
@@ -30,10 +28,15 @@ const GAME_STATES = {
 }
 
 const game = {
+    fps: 0,
     state: GAME_STATES.IDLE,
 }
 
 const DELTA = {
+    CEILING: 1000 / 60, // 60 fps
+}
+
+const delta = {
     now: null,
     value: null,
     then: null,
@@ -62,6 +65,8 @@ class Player extends GameObject {
     constructor(context, x, y, width, height, colour = CONSTANTS.PLAYER_COLOUR) {
         super(context, x, y, width, height)
         this.colour = colour
+        this.oldX = x
+        this.oldY = y
         this.velocity = {
             x: 0,
             y: 0,
@@ -78,7 +83,9 @@ class Platform extends GameObject {
         this.height = height
         this.width = width
         this.x = x
+        this.oldX = x
         this.y = y
+        this.oldY = y
         this.velocity = 400
     }
 }
@@ -97,38 +104,36 @@ function initialise() {
 }
 
 function cleanStartGameLoop() {
-    window.cancelAnimationFrame(animationFrameRequestId)
+    DELTA.then = 0
     startMusic()
 
-    registerEventListeners()
     player = new Player(context, 50, 30, CONSTANTS.PLAYER_WIDTH, CONSTANTS.PLAYER_HEIGHT)
 
     platforms = []
-    platforms.push(new Platform(context, 0, getRandomArbitrary(400, canvas.height - 50), 270, 50))
-    platforms.push(new Platform(context, 370, getRandomArbitrary(400, canvas.height - 50), 270, 50))
+    platforms.push(new Platform(context, 50, getRandomArbitrary(400, canvas.height - 50), 270, 50))
+    platforms.push(new Platform(context, 400, getRandomArbitrary(400, canvas.height - 50), 270, 50))
 
     game.state = GAME_STATES.PLAYING
 
-    window.requestAnimationFrame(() => {
-        update()
-    })
+    window.requestAnimationFrame(update)
 }
 
 function update() {
-    calculateMovement()
-    draw()
-    updateGameState()
-    updateScore()
-    handleCollisions()
+    updateDeltaTime()
 
-    if (game.state === GAME_STATES.LOST) {
-        return endGame()
+    if (DELTA.value < DELTA.CEILING) {
+        calculateMovement()
+        draw()
+        updateGameState()
+        updateScore()
+        handleCollisions()
+
+        if (game.state === GAME_STATES.LOST) {
+            return endGame()
+        }
     }
 
-    animationFrameRequestId = window.requestAnimationFrame(() => {
-        update()
-    })
-    updateDeltaTime()
+    animationFrameRequestId = window.requestAnimationFrame(update)
 }
 
 function calculateMovement() {
@@ -139,7 +144,7 @@ function calculateMovement() {
 function handleCollisions() {
     if (isColliding(player, platforms) && !player.isJumping) {
         player.isColliding = true
-        player.velocity.y = -player.velocity.y / 2
+        player.velocity.y = -player.velocity.y / 3
     }
 }
 
@@ -149,11 +154,13 @@ function movePlayer() {
     }
 
     if (player.velocity.y < CONSTANTS.MAX_VELOCITY) {
-        player.velocity.y += CONSTANTS.GRAVITY
+        player.velocity.y += CONSTANTS.GRAVITY * DELTA.value
     }
 
     player.velocity.y = Math.min(player.velocity.y, CONSTANTS.MAX_VELOCITY)
+    player.oldY = player.y
     player.y += player.velocity.y * DELTA.value
+    player.x += player.velocity.x * DELTA.value
 }
 
 function movePlatforms() {
@@ -162,6 +169,8 @@ function movePlatforms() {
             platform.x = canvas.width
             platform.y = getRandomArbitrary(300, canvas.height - 50)
         }
+
+        platform.oldX = platform.x
         platform.x -= platform.velocity * DELTA.value
     })
 }
@@ -174,13 +183,16 @@ function draw() {
 
     player.draw()
 
-    renderScore()
+    drawHUD()
 }
 
 function updateDeltaTime() {
     DELTA.now = Date.now()
-    DELTA.value = Math.min((DELTA.now - DELTA.then) / 1000, CONSTANTS.DELTA_CEILING)
+    const currentDelta = (DELTA.now - DELTA.then) / 1000
+    DELTA.value = currentDelta
     DELTA.then = DELTA.now
+
+    game.fps = Math.round(1 / currentDelta)
 }
 
 function registerEventListeners() {
@@ -213,45 +225,47 @@ function updateGameState() {
     }
 }
 
-function handleRestart(e) {
-    if (e.keyCode === KEYCODES.SPACE) {
-        cleanStartGameLoop()
-    }
-}
-
 function endGame() {
     renderGameOverScreen()
 }
 
 function isColliding(player, platforms) {
-    for (let i = 0; i < platforms.length; i++) {
-        const collision = performAABBTest(
-            {
-                ...player,
-                width: player.width,
-                height: player.height,
-            },
-            {
-                x: platforms[i].x,
-                y: platforms[i].y,
-                width: platforms[i].width,
-                height: platforms[i].height,
-            }
-        )
-
-        if (collision) {
-            player.y = platforms[i].y - player.height
-            return platforms[i]
-        }
-    }
-
-    function performAABBTest(rectA, rectB) {
+    const performAABBTest = (rectA, rectB) => {
         return (
             rectA.x + rectA.width > rectB.x &&
             rectA.x < rectB.x + rectB.width &&
             rectA.y + rectA.height > rectB.y &&
             rectA.y < rectB.y + rectB.height
         )
+    }
+
+    const collidedFromLeft = (rectA, rectB) => {
+        return rectA.x + rectA.width < rectB.oldX
+    }
+
+    for (let i = 0; i < platforms.length; i++) {
+        const playerRect = {
+            ...player,
+            width: player.width,
+            height: player.height,
+        }
+        const platformRect = {
+            x: platforms[i].x,
+            y: platforms[i].y,
+            oldX: platforms[i].oldX,
+            width: platforms[i].width,
+            height: platforms[i].height,
+        }
+
+        const collision = performAABBTest(playerRect, platformRect)
+
+        if (collision) {
+            const leftCollision = collidedFromLeft(playerRect, platformRect)
+            if (leftCollision) {
+                return (player.velocity.x = -1000)
+            }
+            return (player.y = platforms[i].y - player.height)
+        }
     }
 }
 
@@ -280,10 +294,21 @@ function renderGameOverScreen() {
     context.fillText('[press space]', canvas.width / 2, canvas.height / 1.5)
 }
 
-function renderScore() {
-    context.font = '16px Tahoma'
+function drawFps() {
+    context.font = '14px Tahoma'
     context.fillStyle = 'black'
-    context.fillText(player.score, 30, 20)
+    context.fillText(`fps:  ${game.fps}`, 50, 40)
+}
+
+function drawScore() {
+    context.font = '14px Tahoma'
+    context.fillStyle = 'black'
+    context.fillText(`score: ${player.score}`, 50, 20)
+}
+
+function drawHUD() {
+    drawFps()
+    drawScore()
 }
 
 function updateScore() {
