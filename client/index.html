@@ -24,7 +24,20 @@
         }
 
         canvas {
-            height: 70%;
+            height: auto;
+            width: 40%;
+        }
+
+        @media (max-width: 1080px) {
+            canvas {
+                width: 50%;
+            }
+        }
+
+        @media (max-width: 600px) {
+            canvas {
+                width: 90%;
+            }
         }
     </style>
 </head>

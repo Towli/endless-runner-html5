@@ -197,6 +197,7 @@ function updateDeltaTime() {
 
 function registerEventListeners() {
     document.addEventListener('keydown', handleKeydown)
+    document.addEventListener('touchstart', handleTouch)
 }
 
 function handleKeydown(e) {
@@ -208,6 +209,16 @@ function handleKeydown(e) {
         if (game.state === GAME_STATES.IDLE || game.state === GAME_STATES.LOST) {
             return cleanStartGameLoop()
         }
+    }
+}
+
+function handleTouch(e) {
+    if (game.state === GAME_STATES.PLAYING) {
+        return jump()
+    }
+
+    if (game.state === GAME_STATES.IDLE || game.state === GAME_STATES.LOST) {
+        return cleanStartGameLoop()
     }
 }
 
