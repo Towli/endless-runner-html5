@@ -5,20 +5,19 @@
  * 1. promote movement to objects
  * 2. interesting platform spawns
  * 3. create platform prop class
- * 4. impl double jump
  */
-
 const CONSTANTS = {
     CANVAS_WIDTH: 500,
     CANVAS_HEIGHT: 500,
     BG_COLOUR: '#28AFB0',
     PLATFORM_COLOUR: '#EE964B',
     PLAYER_COLOUR: '#1F271B',
-    PLAYER_HEIGHT: 20,
-    PLAYER_WIDTH: 20,
-    GRAVITY: 2500,
-    MAX_VELOCITY: 1200,
-    JUMP_SPEED: 600,
+    // PLAYER_COLOUR: 'white',
+    PLAYER_HEIGHT: 60,
+    PLAYER_WIDTH: 60,
+    GRAVITY: 0.002,
+    MAX_VELOCITY: 1,
+    JUMP_SPEED: 0.6,
     MAX_JUMPS: 2,
 }
 
@@ -33,16 +32,7 @@ const game = {
     fps: 0,
     state: GAME_STATES.IDLE,
     bestScore: 0,
-}
-
-const DELTA = {
-    CEILING: 1000 / 60, // 60 fps
-}
-
-const delta = {
-    now: null,
-    value: null,
-    then: null,
+    firstUpdate: true,
 }
 
 const KEYCODES = {
@@ -77,7 +67,75 @@ class Player extends GameObject {
         this.score = 0
         this.bestScore = 0
         this.isJumping = false
+        this.isFalling = true
         this.jumps = CONSTANTS.MAX_JUMPS
+        this.sprite = null
+        this.currentFrame = 0
+        this.spriteSet = {}
+    }
+
+    move() {
+        if (this.velocity.y > 0) {
+            this.isJumping = false
+            this.isFalling = true
+        } else {
+            this.isFalling = false
+        }
+
+        if (this.velocity.y < CONSTANTS.MAX_VELOCITY) {
+            this.velocity.y += CONSTANTS.GRAVITY * timestep
+        }
+
+        this.velocity.y = Math.min(this.velocity.y, CONSTANTS.MAX_VELOCITY)
+        this.oldY = this.y
+        this.y += this.velocity.y * timestep
+        this.x += this.velocity.x * timestep
+    }
+
+    draw() {
+        this.context.fillStyle = 'white'
+        this.context.font = '16px Tahoma'
+        context.fillText(`baz`, this.x + 30, this.y - 10)
+        this.drawSprite()
+    }
+
+    setSprite(label, sprite) {
+        this.spriteSet[label] = sprite
+    }
+
+    _getCurrentSprite() {
+        if (this.isJumping || this.isFalling) {
+            return this.spriteSet['jump']
+        }
+
+        return this.spriteSet['run']
+    }
+
+    drawSprite(delta) {
+        const currentSprite = this._getCurrentSprite()
+
+        if (this.currentFrame >= 6) {
+            this.currentFrame = 0
+        }
+
+        const width = currentSprite.width / 6
+        const height = currentSprite.height
+        const sourceX = this.currentFrame * width
+        const sourceY = 15 // hardcoded offset for good clipping, temp..
+
+        this.context.drawImage(
+            currentSprite,
+            sourceX,
+            sourceY,
+            width - 15,
+            height - 15,
+            this.x,
+            this.y,
+            this.width,
+            this.height
+        )
+
+        this.currentFrame++
     }
 }
 
@@ -91,28 +149,87 @@ class Platform extends GameObject {
         this.oldX = x
         this.y = y
         this.oldY = y
-        this.velocity = 400
+        this.velocity = 0.4
+    }
+
+    move() {
+        if (this.x + this.width < 0) {
+            this.x = canvas.width
+            this.y = getRandomArbitrary(300, canvas.height - 50)
+        }
+
+        this.oldX = this.x
+        this.x -= this.velocity * timestep
+    }
+
+    draw() {
+        this.context.fillStyle = this.colour
+        this.context.fillRect(this.x, this.y, this.width, this.height)
+        this.context.fillStyle = 'black'
+        this.context.font = '16px Tahoma'
+        context.fillText(`footlong`, this.x + this.width / 2, this.y + 25)
     }
 }
 
-let canvas, context, animationFrameRequestId, player
-let platforms = []
+const backdrop = {
+    first: {
+        image: null,
+        x: 0,
+    },
+    second: {
+        image: null,
+        x: 896,
+    },
+}
+
+// todo; rehome these
+let canvas,
+    context,
+    animationFrameRequestId,
+    player,
+    background,
+    backgroundX = 0,
+    platforms = [],
+    runSprite,
+    jumpSprite,
+    lastFrameTimeInMs = 0,
+    maxFPS = 10,
+    delta = 0
+
+const timestep = 1000 / 60 //
 
 function initialise() {
     canvas = document.getElementById('canvas')
     context = canvas.getContext('2d')
 
     canvas.width = canvas.height = CONSTANTS.CANVAS_WIDTH
+    context.imageSmoothingEnabled = false
 
-    registerEventListeners()
-    renderMenuScreen()
+    backdrop.first.image = new Image()
+    backdrop.first.image.src = 'assets/city/bright/city.png'
+    backdrop.second.image = new Image()
+    backdrop.second.image.src = 'assets/city/bright/city.png'
+
+    runSprite = new Image()
+    runSprite.src = 'assets/woodcutter/run.png'
+
+    jumpSprite = new Image()
+    jumpSprite.src = 'assets/woodcutter/jump.png'
+
+    loadImages([backdrop.first.image, backdrop.second.image, runSprite, jumpSprite]).then(() => {
+        registerEventListeners()
+        renderMenuScreen()
+    })
 }
 
 function cleanStartGameLoop() {
-    DELTA.then = 0
     startMusic()
 
+    game.firstUpdate = true
+
     player = new Player(context, 50, 30, CONSTANTS.PLAYER_WIDTH, CONSTANTS.PLAYER_HEIGHT)
+    player.setSprite('run', runSprite)
+    player.setSprite('jump', jumpSprite)
 
     platforms = []
     platforms.push(new Platform(context, 50, getRandomArbitrary(400, canvas.height - 50), 270, 50))
@@ -123,28 +240,51 @@ function cleanStartGameLoop() {
     window.requestAnimationFrame(update)
 }
 
-function update() {
-    updateDeltaTime()
+function update(timestamp) {
+    if (game.firstUpdate) {
+        lastFrameTimeInMs = timestamp
+    }
 
-    if (DELTA.value < DELTA.CEILING) {
+    delta += timestamp - lastFrameTimeInMs // get the delta time since last frame
+    lastFrameTimeInMs = timestamp
+
+    // simulate updates until we reach the timestep
+    while (delta >= timestep) {
         calculateMovement()
-        draw()
         updateGameState()
         updateScore()
         handleCollisions()
         scaleDifficultyByScore()
-
-        if (game.state === GAME_STATES.LOST) {
-            return endGame()
-        }
+        delta -= timestep
     }
 
+    if (game.state === GAME_STATES.LOST) {
+        return endGame()
+    }
+
+    draw()
     animationFrameRequestId = window.requestAnimationFrame(update)
+    game.firstUpdate = false
 }
 
+function updateDelta(timestamp) {}
+
 function calculateMovement() {
-    movePlayer()
-    movePlatforms()
+    player.move()
+    platforms.forEach((platform) => {
+        platform.move()
+    })
+
+    if (backdrop.first.x + 896 < 0) {
+        backdrop.first.x = backdrop.second.x + 896
+    }
+
+    if (backdrop.second.x + 896 < 0) {
+        backdrop.second.x = backdrop.first.x + 896
+    }
+
+    backdrop.first.x -= 1
+    backdrop.second.x -= 1
 }
 
 function handleCollisions() {
@@ -154,51 +294,16 @@ function handleCollisions() {
     }
 }
 
-function movePlayer() {
-    if (player.velocity.y > 0) {
-        player.isJumping = false
-    }
-
-    if (player.velocity.y < CONSTANTS.MAX_VELOCITY) {
-        player.velocity.y += CONSTANTS.GRAVITY * DELTA.value
-    }
-
-    player.velocity.y = Math.min(player.velocity.y, CONSTANTS.MAX_VELOCITY)
-    player.oldY = player.y
-    player.y += player.velocity.y * DELTA.value
-    player.x += player.velocity.x * DELTA.value
-}
-
-function movePlatforms() {
-    platforms.forEach((platform) => {
-        if (platform.x + platform.width < 0) {
-            platform.x = canvas.width
-            platform.y = getRandomArbitrary(300, canvas.height - 50)
-        }
-
-        platform.oldX = platform.x
-        platform.x -= platform.velocity * DELTA.value
-    })
-}
-
 function draw() {
     context.fillStyle = CONSTANTS.BG_COLOUR
     context.fillRect(0, 0, canvas.width, canvas.height)
+    drawBackground()
 
     platforms.forEach((platform) => platform.draw())
 
     player.draw()
 
     drawHUD()
-}
-
-function updateDeltaTime() {
-    DELTA.now = Date.now()
-    const currentDelta = (DELTA.now - DELTA.then) / 1000
-    DELTA.value = currentDelta
-    DELTA.then = DELTA.now
-
-    game.fps = Math.round(1 / currentDelta)
 }
 
 function registerEventListeners() {
@@ -238,12 +343,13 @@ function jump() {
 }
 
 function updateGameState() {
-    if (player.y > canvas.height) {
+    if (player.y > canvas.height || player.x + player.width < 0) {
         game.state = GAME_STATES.LOST
     }
 }
 
 function endGame() {
+    window.cancelAnimationFrame(animationFrameRequestId) // not sure if this does much here
     setBestScore()
     renderGameOverScreen()
 }
@@ -286,13 +392,13 @@ function isColliding(player, platforms) {
             const leftCollision = collidedFromLeft(playerRect, platformRect)
 
             if (leftCollision) {
-                return (player.velocity.x = -1000)
+                return (player.velocity.x = -0.5)
             }
 
             const bottomCollision = collidedFromBottom(playerRect, platformRect)
 
             if (bottomCollision) {
-                return (player.velocity.y = 1000)
+                return (player.velocity.y = 0.5)
             }
 
             player.jumps = CONSTANTS.MAX_JUMPS
@@ -305,20 +411,25 @@ function renderMenuScreen() {
     document.addEventListener('keydown', handleKeydown)
     context.fillStyle = CONSTANTS.BG_COLOUR
     context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(backdrop.first.image, 0, 0, 896, 504)
     context.textAlign = 'center'
     context.font = '24px Tahoma'
-    context.fillStyle = 'black'
-    context.fillText('runna', canvas.width / 2, canvas.height / 3)
+    context.fillStyle = 'white'
+    context.fillText('baz the game', canvas.width / 2, canvas.height / 3)
     context.font = '16px Tahoma'
+    context.fillStyle = 'black'
+    context.fillRect(canvas.width / 2 - 50, canvas.height / 2 - 20, 100, 30)
+    context.fillStyle = 'white'
     context.fillText(`space to start`, canvas.width / 2, canvas.height / 2)
 }
 
 function renderGameOverScreen() {
     context.fillStyle = CONSTANTS.BG_COLOUR
     context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(backdrop.first.image, 0, 0, 896, 504)
     context.textAlign = 'center'
     context.font = '24px Tahoma'
-    context.fillStyle = 'black'
+    context.fillStyle = 'white'
     context.fillText('game over', canvas.width / 2, canvas.height / 3)
     context.font = '16px Tahoma'
     context.fillText(`score: ${player.score}`, canvas.width / 2, canvas.height / 2)
@@ -360,7 +471,7 @@ function getRandomArbitrary(min, max) {
 
 function scaleDifficultyByScore() {
     const threshold = 400
-    const velocityIncease = 70
+    const velocityIncease = 0.1
     if (player.score % threshold === 0) {
         platforms.forEach((platform) => (platform.velocity += velocityIncease))
     }
@@ -370,6 +481,27 @@ function setBestScore() {
     if (player.score > game.bestScore) {
         game.bestScore = player.score
     }
+}
+
+function drawBackground() {
+    context.drawImage(backdrop.first.image, backdrop.first.x, 0, 896, 504)
+    context.drawImage(backdrop.second.image, backdrop.second.x, 0, 896, 504)
+}
+
+function loadImages(images) {
+    const imageLoadTasks = images.map((image) => {
+        return new Promise((resolve, reject) => {
+            image.onload = () => {
+                resolve()
+            }
+
+            image.onerror = (error) => {
+                reject(error)
+            }
+        })
+    })
+
+    return Promise.all(imageLoadTasks)
 }
 
 initialise()
