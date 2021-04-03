@@ -560,7 +560,7 @@ function drawScore() {
 }
 
 function drawHUD() {
-    drawFps()
+    // drawFps()
     drawScore()
 }
 
