@@ -59,6 +59,7 @@ const game = {
     state: GAME_STATES.IDLE,
     bestScore: 0,
     firstUpdate: true,
+    audio: null,
 }
 
 const KEYCODES = {
@@ -273,7 +274,6 @@ class Platform extends GameObject {
 }
 
 function initialise() {
-    startMusic()
     canvas = document.getElementById('canvas')
     context = canvas.getContext('2d')
 
@@ -312,6 +312,7 @@ function initialise() {
 }
 
 function cleanStartGameLoop() {
+    startMusic()
     game.firstUpdate = true
 
     player = new Player(context, 50, 30, CONSTANTS.PLAYER_WIDTH, CONSTANTS.PLAYER_HEIGHT)
@@ -319,7 +320,7 @@ function cleanStartGameLoop() {
     player.setSprite('jump', jumpSprite)
     player.setSprite('fall', fallSprite)
 
-    const platforms = generatePlatformVariations(20, platformSprite)
+    const platforms = generatePlatformVariations(30, platformSprite)
 
     populateInitialQueueState(platformQueue, platforms)
 
@@ -423,7 +424,7 @@ function handleKeydown(e) {
 
 function handleKeyup(e) {
     if (e.keyCode === KEYCODES.SPACE) {
-        console.log('keyup')
+        // todo
     }
 }
 
@@ -568,9 +569,11 @@ function updateScore() {
 }
 
 function startMusic() {
-    const audio = new Audio(audioSrc)
-    audio.play()
-    // document.getElementById('audio').play().catch(console.log)
+    if (!game.audio) {
+        game.audio = new Audio(audioSrc)
+    }
+    game.audio.play()
+    game.audio.loop = true
 }
 
 function getRandomArbitrary(min, max) {
