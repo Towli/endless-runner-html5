@@ -6,6 +6,23 @@
  * 2. interesting platform spawns
  * 3. create platform prop class
  */
+
+/**
+    platform spawning
+    -----------------
+    rules:
+    1. no platform's xMin or xMax should overlap another's
+    2. if a platform's xMax is < 0 it should be removed
+    3. a platform's xMin and width should be randomised on spawn
+    4. a platform's width can be greater than the canvas width (to a sensible limit)
+    current solution:
+    - manage a FIFO queue of platforms
+    - a platform's x and width is determined based on the last platform in the queue, when enqueueing
+    - each platform has responsibility for detecting whether it needs requeueing, and does so via callback
+    - when drawing each frame, use a value copy of the platform queue to prevent rendering issues from 
+    requeueing
+ */
+
 const CONSTANTS = {
     CANVAS_WIDTH: 500,
     CANVAS_HEIGHT: 500,
@@ -36,6 +53,61 @@ const game = {
 
 const KEYCODES = {
     SPACE: 32,
+}
+
+const backdrop = {
+    first: {
+        image: null,
+        x: 0,
+    },
+    second: {
+        image: null,
+        x: 896,
+    },
+}
+
+// todo; rehome these
+let canvas,
+    context,
+    animationFrameRequestId,
+    player,
+    background,
+    backgroundX = 0,
+    runSprite,
+    jumpSprite,
+    fallSprite,
+    platformSprite,
+    lastFrameTimeInMs = 0,
+    maxFPS = 10,
+    delta = 0,
+    platformQueue
+
+const timestep = 1000 / 60 // timesteps of 60fps
+
+class Queue {
+    constructor() {
+        this.elements = []
+    }
+
+    enqueue(element) {
+        this.elements.push(element)
+    }
+
+    dequeue(element) {
+        return this.elements.shift()
+    }
+
+    readAll() {
+        return this.elements
+    }
+
+    flush() {
+        this.elements = []
+    }
+
+    getLength() {
+        return this.elements.length
+    }
 }
 
 class GameObject {
@@ -127,8 +199,6 @@ class Player extends GameObject {
             }
         }
 
-        this.isJumping && console.log(this.currentFrame)
-
         const width = currentSprite.width / numFrames
         const height = currentSprite.height
         const sourceX = Math.floor(this.currentFrame) * width
@@ -163,10 +233,9 @@ class Platform extends GameObject {
         this.velocity = 0.4
     }
 
-    move() {
+    move(requeueHandler) {
         if (this.x + this.width < 0) {
-            this.x = canvas.width
-            this.y = getRandomArbitrary(300, canvas.height - 50)
+            requeueHandler()
         }
 
         this.oldX = this.x
@@ -175,11 +244,6 @@ class Platform extends GameObject {
 
     draw() {
         this.drawSprite()
-        // this.context.fillStyle = this.colour
-        // this.context.fillRect(this.x, this.y, this.width, this.height)
-        // this.context.fillStyle = 'black'
-        // this.context.font = '16px Tahoma'
-        // context.fillText(`footlong`, this.x + this.width / 2, this.y + 25)
     }
 
     drawSprite() {
@@ -191,35 +255,6 @@ class Platform extends GameObject {
         this.context.drawImage(sprite, this.x, this.y, this.width, this.height)
     }
 }
-
-const backdrop = {
-    first: {
-        image: null,
-        x: 0,
-    },
-    second: {
-        image: null,
-        x: 896,
-    },
-}
-
-// todo; rehome these
-let canvas,
-    context,
-    animationFrameRequestId,
-    player,
-    background,
-    backgroundX = 0,
-    platforms = [],
-    runSprite,
-    jumpSprite,
-    fallSprite,
-    platformSprite,
-    lastFrameTimeInMs = 0,
-    maxFPS = 10,
-    delta = 0
-
-const timestep = 1000 / 60 // timesteps of 60fps
 
 function initialise() {
     canvas = document.getElementById('canvas')
@@ -245,6 +280,8 @@ function initialise() {
     platformSprite = new Image()
     platformSprite.src = 'assets/city/platform_tile.png'
 
+    platformQueue = new Queue()
+
     loadImages([
         backdrop.first.image,
         backdrop.second.image,
@@ -267,22 +304,9 @@ function cleanStartGameLoop() {
     player.setSprite('jump', jumpSprite)
     player.setSprite('fall', fallSprite)
 
-    const numPlatforms = 4
+    const platforms = generatePlatformVariations(20, platformSprite)
 
-    platforms = []
-
-    for (let i = 0; i < numPlatforms; i++) {
-        const platform = new Platform(
-            context,
-            i * canvas.width,
-            getRandomArbitrary(400, canvas.height - 50),
-            getRandomArbitrary(100, 300),
-            50
-        )
-
-        platform.setSprite('tile', platformSprite)
-        platforms.push(platform)
-    }
+    populateInitialQueueState(platformQueue, platforms)
 
     game.state = GAME_STATES.PLAYING
 
@@ -320,8 +344,13 @@ function updateDelta(timestamp) {}
 
 function calculateMovement() {
     player.move()
+
+    const platforms = [...platformQueue.readAll()]
+
     platforms.forEach((platform) => {
-        platform.move()
+        platform.move(() => {
+            requeuePlatform(platformQueue)
+        })
     })
 
     if (backdrop.first.x + 896 < 0) {
@@ -337,7 +366,7 @@ function calculateMovement() {
 }
 
 function handleCollisions() {
-    if (isColliding(player, platforms) && !player.isJumping) {
+    if (isColliding(player, platformQueue.readAll()) && !player.isJumping) {
         player.isColliding = true
         player.velocity.y = -player.velocity.y / 3
     }
@@ -348,7 +377,11 @@ function draw() {
     context.fillRect(0, 0, canvas.width, canvas.height)
     drawBackground()
 
-    platforms.forEach((platform) => platform.draw())
+    // find better solution for this
+    platformQueue
+        .readAll()
+        .slice(0, 5)
+        .forEach((platform) => platform.draw())
 
     player.draw()
 
@@ -357,6 +390,7 @@ function draw() {
 
 function registerEventListeners() {
     document.addEventListener('keydown', handleKeydown)
+    document.addEventListener('keyup', handleKeyup)
     document.addEventListener('touchstart', handleTouchStart)
 }
 
@@ -369,6 +403,12 @@ function handleKeydown(e) {
         if (game.state === GAME_STATES.IDLE || game.state === GAME_STATES.LOST) {
             return cleanStartGameLoop()
         }
+    }
+}
+
+function handleKeyup(e) {
+    if (e.keyCode === KEYCODES.SPACE) {
+        console.log('keyup')
     }
 }
 
@@ -466,7 +506,7 @@ function renderMenuScreen() {
     context.textAlign = 'center'
     context.font = '24px Tahoma'
     context.fillStyle = 'white'
-    context.fillText('baz the game', canvas.width / 2, canvas.height / 3)
+    context.fillText('runna', canvas.width / 2, canvas.height / 3)
     context.font = '16px Tahoma'
     context.fillStyle = 'black'
     context.fillRect(canvas.width / 2 - 50, canvas.height / 2 - 20, 100, 30)
@@ -522,9 +562,14 @@ function getRandomArbitrary(min, max) {
 
 function scaleDifficultyByScore() {
     const threshold = 400
-    const velocityIncease = 0.1
+
+    if (player.score >= threshold * 4) {
+        return
+    }
+
+    const velocityIncease = 0.07
     if (player.score % threshold === 0) {
-        platforms.forEach((platform) => (platform.velocity += velocityIncease))
+        platformQueue.readAll().forEach((platform) => (platform.velocity += velocityIncease))
     }
     player.animationSpeed += 0.1
 }
@@ -554,6 +599,68 @@ function loadImages(images) {
     })
 
     return Promise.all(imageLoadTasks)
+}
+
+/**
+    build an array of platform variations. not concerned about their positions 
+    as this will get set at the poiint of enqueuing (based on the element in front)
+ */
+function generatePlatformVariations(amount, sprite) {
+    const maxWidth = canvas.width
+    const minWidth = maxWidth / 3
+    const platformHeight = 50 // fixed value for now
+
+    const platforms = []
+
+    for (let i = 0; i < amount; i++) {
+        const platform = new Platform(
+            context,
+            0,
+            0,
+            getRandomArbitrary(70, canvas.width),
+            platformHeight
+        )
+
+        platform.setSprite('tile', sprite)
+
+        platforms.push(platform)
+    }
+
+    return platforms
+}
+
+function populateInitialQueueState(queue, platforms) {
+    queue.flush()
+
+    for (let i = 0; i < platforms.length; i++) {
+        if (i === 0) {
+            platforms[i].x = canvas.width / 2 // first platform should be easy to land on
+        } else {
+            const previousPlatform = platforms[i - 1]
+            const randomOffset = getRandomArbitrary(50, 150)
+
+            platforms[i].x = previousPlatform.x + previousPlatform.width + randomOffset
+        }
+
+        platforms[i].y = getRandomArbitrary(canvas.height - 200, canvas.height - 50)
+
+        queue.enqueue(platforms[i])
+    }
+
+    return queue
+}
+
+function requeuePlatform(queue) {
+    const platform = queue.dequeue()
+
+    const platforms = queue.readAll()
+    const randomOffset = getRandomArbitrary(50, 150)
+
+    platform.x =
+        platforms[platforms.length - 1].x + platforms[platforms.length - 1].width + randomOffset
+    platform.y = getRandomArbitrary(canvas.height - 200, canvas.height - 50)
+
+    queue.enqueue(platform)
 }
 
 initialise()
