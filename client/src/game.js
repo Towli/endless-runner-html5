@@ -1,26 +1,36 @@
 'use strict'
 
-/**
- * todo:
- * 1. promote movement to objects
- * 2. interesting platform spawns
- * 3. create platform prop class
- */
+import { loadImages } from './utils'
+
+import cityBackgroundSrc from './assets/city/bright/city.png'
+
+import runSpriteSrc from './assets/woodcutter/run.png'
+import jumpSpriteSrc from './assets/woodcutter/jump.png'
+import fallSpriteSrc from './assets/woodcutter/fall.png'
+import platformSpriteSrc from './assets/city/platform_tile.png'
+
+import audioSrc from './assets/hxc.mp3'
 
 /**
-    platform spawning
-    -----------------
-    rules:
-    1. no platform's xMin or xMax should overlap another's
-    2. if a platform's xMax is < 0 it should be removed
-    3. a platform's xMin and width should be randomised on spawn
-    4. a platform's width can be greater than the canvas width (to a sensible limit)
-    current solution:
-    - manage a FIFO queue of platforms
-    - a platform's x and width is determined based on the last platform in the queue, when enqueueing
-    - each platform has responsibility for detecting whether it needs requeueing, and does so via callback
-    - when drawing each frame, use a value copy of the platform queue to prevent rendering issues from 
-    requeueing
+todo
+----
+1. promote movement to objects
+2. interesting platform spawns
+3. create platform prop class
+
+platform spawning
+-----------------
+rules:
+1. no platform's xMin or xMax should overlap another's
+2. if a platform's xMax is < 0 it should be removed
+3. a platform's xMin and width should be randomised on spawn
+4. a platform's width can be greater than the canvas width (to a sensible limit)
+current solution:
+- manage a FIFO queue of platforms
+- a platform's x and width is determined based on the last platform in the queue, when enqueueing
+- each platform has responsibility for detecting whether it needs requeueing, and does so via callback
+- when drawing each frame, use a value copy of the platform queue to prevent rendering issues from 
+requeueing
  */
 
 const CONSTANTS = {
@@ -83,6 +93,12 @@ let canvas,
     platformQueue
 
 const timestep = 1000 / 60 // timesteps of 60fps
+
+class SpriteManager {
+    constructor() {
+        this.sprites = []
+    }
+}
 
 class Queue {
     constructor() {
@@ -257,6 +273,7 @@ class Platform extends GameObject {
 }
 
 function initialise() {
+    startMusic()
     canvas = document.getElementById('canvas')
     context = canvas.getContext('2d')
 
@@ -264,21 +281,21 @@ function initialise() {
     context.imageSmoothingEnabled = false
 
     backdrop.first.image = new Image()
-    backdrop.first.image.src = 'assets/city/bright/city.png'
+    backdrop.first.image.src = cityBackgroundSrc
     backdrop.second.image = new Image()
-    backdrop.second.image.src = 'assets/city/bright/city.png'
+    backdrop.second.image.src = cityBackgroundSrc
 
     runSprite = new Image()
-    runSprite.src = 'assets/woodcutter/run.png'
+    runSprite.src = runSpriteSrc
 
     jumpSprite = new Image()
-    jumpSprite.src = 'assets/woodcutter/jump.png'
+    jumpSprite.src = jumpSpriteSrc
 
     fallSprite = new Image()
-    fallSprite.src = 'assets/woodcutter/fall.png'
+    fallSprite.src = fallSpriteSrc
 
     platformSprite = new Image()
-    platformSprite.src = 'assets/city/platform_tile.png'
+    platformSprite.src = platformSpriteSrc
 
     platformQueue = new Queue()
 
@@ -295,8 +312,6 @@ function initialise() {
 }
 
 function cleanStartGameLoop() {
-    startMusic()
-
     game.firstUpdate = true
 
     player = new Player(context, 50, 30, CONSTANTS.PLAYER_WIDTH, CONSTANTS.PLAYER_HEIGHT)
@@ -553,7 +568,9 @@ function updateScore() {
 }
 
 function startMusic() {
-    document.getElementById('audio').play().catch(console.log)
+    const audio = new Audio(audioSrc)
+    audio.play()
+    // document.getElementById('audio').play().catch(console.log)
 }
 
 function getRandomArbitrary(min, max) {
@@ -583,22 +600,6 @@ function setBestScore() {
 function drawBackground() {
     context.drawImage(backdrop.first.image, backdrop.first.x, 0, 896, 504)
     context.drawImage(backdrop.second.image, backdrop.second.x, 0, 896, 504)
-}
-
-function loadImages(images) {
-    const imageLoadTasks = images.map((image) => {
-        return new Promise((resolve, reject) => {
-            image.onload = () => {
-                resolve()
-            }
-
-            image.onerror = (error) => {
-                reject(error)
-            }
-        })
-    })
-
-    return Promise.all(imageLoadTasks)
 }
 
 /**

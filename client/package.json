@@ -1,15 +1,20 @@
 {
-  "name": "infinite-runner",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "serve ."
-  },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "serve": "^11.3.2"
-  }
+    "name": "infinite-runner",
+    "version": "1.0.0",
+    "description": "",
+    "private": "true",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "dev": "serve .",
+        "build": "rm -rf dist/ && mkdir dist/ && cp src/index.html dist/index.html && webpack"
+    },
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "serve": "^11.3.2"
+    },
+    "devDependencies": {
+        "webpack": "^5.30.0",
+        "webpack-cli": "^4.6.0"
+    }
 }
