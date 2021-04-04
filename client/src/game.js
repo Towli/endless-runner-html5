@@ -1,6 +1,13 @@
 'use strict'
 
-import { loadImages } from './utils'
+import { loadImages, fetchLeaderboard, publishScore } from './utils'
+import { CORE } from './constants'
+
+import Queue from './Queue'
+import Platform from './Platform'
+import Player from './Player'
+
+import './CanvasTextInput'
 
 import cityBackgroundSrc from './assets/city/bright/city.png'
 
@@ -11,12 +18,30 @@ import platformSpriteSrc from './assets/city/platform_tile.png'
 
 import audioSrc from './assets/hxc.mp3'
 
+const modal = document.querySelector('.publish-score-modal')
+const publishButton = document.querySelector('.publish-score-modal button')
+const nameInput = document.querySelector('.publish-score-modal input')
+
+nameInput.addEventListener('keyup', (event) => {
+    if (event.keyCode === 13) {
+        event.preventDefault()
+        publishButton.click('test')
+    }
+})
+
+publishButton.addEventListener('click', (event, name) => {
+    console.log('publishing name', nameInput.value)
+    publishScore({ name: nameInput.value, score: game.bestScore })
+    nameInput.value = null
+    modal.style.display = 'none'
+})
+
 /**
 todo
 ----
 1. promote movement to objects
-2. interesting platform spawns
-3. create platform prop class
+2. create platform prop class
+3. look into hit regions for buttons within canvas
 
 platform spawning
 -----------------
@@ -33,19 +58,7 @@ current solution:
 requeueing
  */
 
-const CONSTANTS = {
-    CANVAS_WIDTH: 500,
-    CANVAS_HEIGHT: 500,
-    BG_COLOUR: '#28AFB0',
-    PLATFORM_COLOUR: '#EE964B',
-    PLAYER_COLOUR: '#1F271B',
-    PLAYER_HEIGHT: 60,
-    PLAYER_WIDTH: 60,
-    GRAVITY: 0.002,
-    MAX_VELOCITY: 1,
-    JUMP_SPEED: 0.6,
-    MAX_JUMPS: 2,
-}
+const CanvasInput = window.CanvasInput
 
 const GAME_STATES = {
     WON: 1,
@@ -54,16 +67,28 @@ const GAME_STATES = {
     IDLE: 4,
 }
 
+const GAME_SCREEN = {
+    MENU: 1,
+    GAME: 2,
+    GAME_OVER: 3,
+    LEADERBOARD: 4,
+    PUBLISH: 4,
+}
+
 const game = {
     fps: 0,
     state: GAME_STATES.IDLE,
     bestScore: 0,
     firstUpdate: true,
     audio: null,
+    screen: null,
 }
 
 const KEYCODES = {
     SPACE: 32,
+    L: 76,
+    P: 80,
+    M: 77,
 }
 
 const backdrop = {
@@ -93,191 +118,11 @@ let canvas,
     delta = 0,
     platformQueue
 
-const timestep = 1000 / 60 // timesteps of 60fps
-
-class SpriteManager {
-    constructor() {
-        this.sprites = []
-    }
-}
-
-class Queue {
-    constructor() {
-        this.elements = []
-    }
-
-    enqueue(element) {
-        this.elements.push(element)
-    }
-
-    dequeue(element) {
-        return this.elements.shift()
-    }
-
-    readAll() {
-        return this.elements
-    }
-
-    flush() {
-        this.elements = []
-    }
-
-    getLength() {
-        return this.elements.length
-    }
-}
-
-class GameObject {
-    constructor(context, x, y, width, height) {
-        this.context = context
-        this.x = x
-        this.y = y
-        this.height = height
-        this.width = width
-        this.spriteSet = {}
-    }
-
-    draw() {
-        this.context.fillStyle = this.colour
-        this.context.fillRect(this.x, this.y, this.width, this.height)
-    }
-
-    setSprite(label, sprite) {
-        this.spriteSet[label] = sprite
-    }
-}
-
-class Player extends GameObject {
-    constructor(context, x, y, width, height, colour = CONSTANTS.PLAYER_COLOUR) {
-        super(context, x, y, width, height)
-        this.colour = colour
-        this.oldX = x
-        this.oldY = y
-        this.velocity = {
-            x: 0,
-            y: 0,
-        }
-        this.score = 0
-        this.bestScore = 0
-        this.isJumping = false
-        this.isFalling = true
-        this.jumps = CONSTANTS.MAX_JUMPS
-        this.sprite = null
-        this.currentFrame = 0
-        this.animationSpeed = 0.4
-    }
-
-    move() {
-        if (this.velocity.y > 0) {
-            if (this.isJumping) {
-                this.currentFrame = 0
-            }
-
-            this.isJumping = false
-            this.isFalling = true
-        } else {
-            this.isFalling = false
-        }
-
-        if (this.velocity.y < CONSTANTS.MAX_VELOCITY) {
-            this.velocity.y += CONSTANTS.GRAVITY * timestep
-        }
-
-        this.velocity.y = Math.min(this.velocity.y, CONSTANTS.MAX_VELOCITY)
-        this.oldY = this.y
-        this.y += this.velocity.y * timestep
-        this.x += this.velocity.x * timestep
-    }
-
-    draw() {
-        this.drawSprite()
-    }
-
-    // refactor this garbo
-    drawSprite() {
-        let currentSprite = this.spriteSet['run']
-        let numFrames = 6
-
-        if (this.isJumping) {
-            currentSprite = this.spriteSet['jump']
-            numFrames = 3
-        }
-
-        if (this.isFalling) {
-            currentSprite = this.spriteSet['fall']
-            numFrames = 3
-        }
-
-        if (this.currentFrame >= numFrames) {
-            if (this.isFalling || this.isJumping) {
-                this.currentFrame = numFrames - 1
-            } else {
-                this.currentFrame = 0
-            }
-        }
-
-        const width = currentSprite.width / numFrames
-        const height = currentSprite.height
-        const sourceX = Math.floor(this.currentFrame) * width
-        const sourceY = 15 // hardcoded offset for good clipping, temp..
-
-        this.context.drawImage(
-            currentSprite,
-            sourceX,
-            sourceY,
-            width - 15,
-            height - 15,
-            this.x,
-            this.y,
-            this.width,
-            this.height
-        )
-
-        this.currentFrame += 0.3
-    }
-}
-
-class Platform extends GameObject {
-    constructor(context, x, y, width, height, colour = CONSTANTS.PLATFORM_COLOUR) {
-        super(context, x, y, width, height)
-        this.colour = colour
-        this.height = height
-        this.width = width
-        this.x = x
-        this.oldX = x
-        this.y = y
-        this.oldY = y
-        this.velocity = 0.4
-    }
-
-    move(requeueHandler) {
-        if (this.x + this.width < 0) {
-            requeueHandler()
-        }
-
-        this.oldX = this.x
-        this.x -= this.velocity * timestep
-    }
-
-    draw() {
-        this.drawSprite()
-    }
-
-    drawSprite() {
-        const sprite = this.spriteSet['tile']
-
-        const width = sprite.width
-        const height = sprite.height
-
-        this.context.drawImage(sprite, this.x, this.y, this.width, this.height)
-    }
-}
-
 function initialise() {
     canvas = document.getElementById('canvas')
     context = canvas.getContext('2d')
 
-    canvas.width = canvas.height = CONSTANTS.CANVAS_WIDTH
+    canvas.width = canvas.height = CORE.CANVAS_WIDTH
     context.imageSmoothingEnabled = false
 
     backdrop.first.image = new Image()
@@ -313,9 +158,10 @@ function initialise() {
 
 function cleanStartGameLoop() {
     startMusic()
+    game.screen = GAME_SCREEN.GAME
     game.firstUpdate = true
 
-    player = new Player(context, 50, 30, CONSTANTS.PLAYER_WIDTH, CONSTANTS.PLAYER_HEIGHT)
+    player = new Player(context, 50, 30, CORE.PLAYER_WIDTH, CORE.PLAYER_HEIGHT)
     player.setSprite('run', runSprite)
     player.setSprite('jump', jumpSprite)
     player.setSprite('fall', fallSprite)
@@ -338,13 +184,13 @@ function update(timestamp) {
     lastFrameTimeInMs = timestamp
 
     // simulate updates until we reach the timestep
-    while (delta >= timestep) {
+    while (delta >= CORE.TIMESTEP) {
         calculateMovement()
         updateGameState()
         updateScore()
         handleCollisions()
         scaleDifficultyByScore()
-        delta -= timestep
+        delta -= CORE.TIMESTEP
     }
 
     if (game.state === GAME_STATES.LOST) {
@@ -355,8 +201,6 @@ function update(timestamp) {
     animationFrameRequestId = window.requestAnimationFrame(update)
     game.firstUpdate = false
 }
-
-function updateDelta(timestamp) {}
 
 function calculateMovement() {
     player.move()
@@ -389,7 +233,7 @@ function handleCollisions() {
 }
 
 function draw() {
-    context.fillStyle = CONSTANTS.BG_COLOUR
+    context.fillStyle = CORE.BG_COLOUR
     context.fillRect(0, 0, canvas.width, canvas.height)
     drawBackground()
 
@@ -411,13 +255,27 @@ function registerEventListeners() {
 }
 
 function handleKeydown(e) {
-    if (e.keyCode === KEYCODES.SPACE) {
-        if (game.state === GAME_STATES.PLAYING) {
+    if (game.state === GAME_STATES.PLAYING) {
+        if (e.keyCode === KEYCODES.SPACE) {
             return jump()
         }
+    }
 
-        if (game.state === GAME_STATES.IDLE || game.state === GAME_STATES.LOST) {
+    if (game.state !== GAME_STATES.PLAYING) {
+        if (e.keyCode === KEYCODES.SPACE) {
             return cleanStartGameLoop()
+        }
+
+        if (e.keyCode === KEYCODES.L) {
+            return renderLeaderboard()
+        }
+
+        if (e.keyCode === KEYCODES.P) {
+            return renderPublishScoreScreen()
+        }
+
+        if (e.keyCode === KEYCODES.M) {
+            return renderMenuScreen()
         }
     }
 }
@@ -444,7 +302,7 @@ function jump() {
         player.isFalling = false
         player.isColliding = false
         player.currentFrame = 0
-        player.velocity.y = -CONSTANTS.JUMP_SPEED
+        player.velocity.y = -CORE.JUMP_SPEED
         player.jumps--
     }
 }
@@ -508,60 +366,93 @@ function isColliding(player, platforms) {
                 return (player.velocity.y = 0.5)
             }
 
-            player.jumps = CONSTANTS.MAX_JUMPS
+            player.jumps = CORE.MAX_JUMPS
             return (player.y = platforms[i].y - player.height)
         }
     }
 }
 
 function renderMenuScreen() {
+    game.screen = GAME_SCREEN.MENU
     document.addEventListener('keydown', handleKeydown)
-    context.fillStyle = CONSTANTS.BG_COLOUR
+    context.fillStyle = CORE.BG_COLOUR
     context.fillRect(0, 0, canvas.width, canvas.height)
     context.drawImage(backdrop.first.image, 0, 0, 896, 504)
     context.textAlign = 'center'
-    context.font = '24px Tahoma'
+    context.font = '24px Syne Mono'
     context.fillStyle = 'white'
-    context.fillText('runna', canvas.width / 2, canvas.height / 3)
-    context.font = '16px Tahoma'
+    context.fillText('RUNNA', canvas.width / 2, canvas.height / 3)
+    context.font = '16px Syne Mono'
     context.fillStyle = 'black'
     context.fillRect(canvas.width / 2 - 50, canvas.height / 2 - 20, 100, 30)
     context.fillStyle = 'white'
-    context.fillText(`space to start`, canvas.width / 2, canvas.height / 2)
+    context.fillText(`PRESS ⎵`, canvas.width / 2, canvas.height / 2)
+
+    drawHUD()
 }
 
 function renderGameOverScreen() {
-    context.fillStyle = CONSTANTS.BG_COLOUR
+    game.screen = GAME_SCREEN.GAME_OVER
+    context.fillStyle = CORE.BG_COLOUR
     context.fillRect(0, 0, canvas.width, canvas.height)
     context.drawImage(backdrop.first.image, 0, 0, 896, 504)
     context.textAlign = 'center'
-    context.font = '24px Tahoma'
+    context.font = '24px Syne Mono'
     context.fillStyle = 'white'
-    context.fillText('game over', canvas.width / 2, canvas.height / 3)
-    context.font = '16px Tahoma'
-    context.fillText(`score: ${player.score}`, canvas.width / 2, canvas.height / 2)
-    context.font = '16px Tahoma'
-    context.fillText(`best: ${game.bestScore}`, canvas.width / 2, canvas.height / 1.75)
-    context.font = '16px Tahoma'
-    context.fillText('press space or touch ( ͡° ͜ʖ ͡°)', canvas.width / 2, canvas.height / 1.5)
+    context.fillText('TRY AGAIN', canvas.width / 2, canvas.height / 4)
+    context.font = '16px Syne Mono'
+    context.fillText(`SCORE: ${player.score}`, canvas.width / 2, canvas.height / 2.7)
+    context.font = '16px Syne Mono'
+    context.fillText(`BEST: ${game.bestScore}`, canvas.width / 2, canvas.height / 2.2)
+    context.font = '16px Syne Mono'
+    context.fillText('PRESS ⎵', canvas.width / 2, canvas.height / 1.3)
+
+    drawHUD()
+}
+
+function renderPublishScoreScreen() {
+    game.screen = GAME_SCREEN.PUBLISH
+    modal.style.display = 'flex'
+    nameInput.focus()
+
+    drawHUD()
+}
+
+function drawHUD() {
+    drawScore()
+    drawOptions()
 }
 
 function drawFps() {
-    context.font = '14px Tahoma'
+    context.font = '14px Syne Mono'
     context.fillStyle = 'black'
     context.fillText(`fps:  ${game.fps}`, 50, 40)
 }
 
 function drawScore() {
-    context.font = '14px Tahoma'
+    context.font = '14px Syne Mono'
     context.fillStyle = 'black'
-    context.fillText(`score: ${player.score}`, 50, 20)
-    context.fillText(`best: ${game.bestScore}`, canvas.width - 40, 20)
+
+    if (game.state === GAME_STATES.PLAYING) {
+        context.fillText(`score: ${player.score}`, 50, 20)
+    }
+
+    if (game.bestScore) {
+        context.fillText(`best: ${game.bestScore}`, canvas.width / 1.1, 20)
+    }
 }
 
-function drawHUD() {
-    // drawFps()
-    drawScore()
+function drawOptions() {
+    context.font = '14px Syne Mono'
+    context.fillStyle = 'black'
+
+    if (game.screen === GAME_SCREEN.GAME) {
+        return
+    }
+
+    context.fillText(`menu [M]`, canvas.width / 10, 20)
+    context.fillText(`publish [P]`, canvas.width / 2.9, 20)
+    context.fillText(`leaderboard [L]`, canvas.width / 1.5, 20)
 }
 
 function updateScore() {
@@ -665,6 +556,57 @@ function requeuePlatform(queue) {
     platform.y = getRandomArbitrary(canvas.height - 200, canvas.height - 50)
 
     queue.enqueue(platform)
+}
+
+function renderLeaderboard() {
+    game.screen = GAME_SCREEN.LEADERBOARD
+
+    const entries = fetchLeaderboard()
+
+    context.fillStyle = CORE.BG_COLOUR
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(backdrop.first.image, 0, 0, 896, 504)
+    context.textAlign = 'center'
+    context.font = '20px Syne Mono'
+    context.fillStyle = 'white'
+    context.fillText('HALL OF FAME', canvas.width / 2, canvas.height / 6)
+    context.fillText('RANK   SCORE   NAME', canvas.width / 2, canvas.height / 3)
+    context.font = '16px Syne Mono'
+
+    entries.forEach((entry, index) => {
+        context.fillText(
+            ` ${index + 1}       ${entry.score}     ${entry.name}`,
+            canvas.width / 2,
+            canvas.height / 3 + (index + 1) * 25
+        )
+    })
+
+    drawHUD()
+}
+
+function renderInput(x, y) {
+    let test = new CanvasInput({
+        x,
+        y,
+        canvas,
+        fontSize: 16,
+        fontFamily: 'Syne Mono',
+        width: 100,
+        padding: 5,
+        borderRadius: 3,
+        borderWidth: 1,
+        borderColor: 'black',
+        backgroundColor: 'none',
+        selectionColor: 'none',
+        fontColor: '#fff',
+        boxShadow: 'none',
+        innerShadow: 'none',
+        maxlength: 4,
+        onsubmit: (e) => {
+            publishScore(e.target.value, game.bestScore)
+            // test = null
+        },
+    })
 }
 
 initialise()

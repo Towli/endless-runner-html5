@@ -1,0 +1,14 @@
+export const CORE = {
+    CANVAS_WIDTH: 500,
+    CANVAS_HEIGHT: 500,
+    BG_COLOUR: '#28AFB0',
+    PLATFORM_COLOUR: '#EE964B',
+    PLAYER_COLOUR: '#1F271B',
+    PLAYER_HEIGHT: 60,
+    PLAYER_WIDTH: 60,
+    GRAVITY: 0.002,
+    MAX_VELOCITY: 1,
+    JUMP_SPEED: 0.6,
+    MAX_JUMPS: 2,
+    TIMESTEP: 1000 / 60, // timesteps of 60fps
+}

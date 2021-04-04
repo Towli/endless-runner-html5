@@ -11,6 +11,7 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
+        "fontfaceobserver": "^2.1.0",
         "serve": "^11.3.2"
     },
     "devDependencies": {
