@@ -1,11 +1,14 @@
 'use strict'
 
-import { loadImages, fetchLeaderboard, publishScore } from './utils'
+import { loadImages, loadFonts, fetchLeaderboard, publishScore } from './utils'
 import { CORE } from './constants'
 
 import Queue from './Queue'
 import Platform from './Platform'
 import Player from './Player'
+
+import Font from './SyneMono-Regular.ttf'
+import './style.css'
 
 import './CanvasTextInput'
 
@@ -22,19 +25,21 @@ const modal = document.querySelector('.publish-score-modal')
 const publishButton = document.querySelector('.publish-score-modal button')
 const nameInput = document.querySelector('.publish-score-modal input')
 
-nameInput.addEventListener('keyup', (event) => {
-    if (event.keyCode === 13) {
-        event.preventDefault()
-        publishButton.click('test')
-    }
-})
+nameInput &&
+    nameInput.addEventListener('keyup', (event) => {
+        if (event.keyCode === 13) {
+            event.preventDefault()
+            publishButton.click('test')
+        }
+    })
 
-publishButton.addEventListener('click', (event, name) => {
-    console.log('publishing name', nameInput.value)
-    publishScore({ name: nameInput.value, score: game.bestScore })
-    nameInput.value = null
-    modal.style.display = 'none'
-})
+publishButton &&
+    publishButton.addEventListener('click', (event, name) => {
+        console.log('publishing name', nameInput.value)
+        publishScore({ name: nameInput.value, score: game.bestScore })
+        nameInput.value = null
+        modal.style.display = 'none'
+    })
 
 /**
 todo
@@ -122,6 +127,8 @@ function initialise() {
     canvas = document.getElementById('canvas')
     context = canvas.getContext('2d')
 
+    const SyneMono = new FontFace('Syne Mono', `url(${Font})`)
+
     canvas.width = canvas.height = CORE.CANVAS_WIDTH
     context.imageSmoothingEnabled = false
 
@@ -144,16 +151,14 @@ function initialise() {
 
     platformQueue = new Queue()
 
-    loadImages([
-        backdrop.first.image,
-        backdrop.second.image,
-        runSprite,
-        jumpSprite,
-        platformSprite,
-    ]).then(() => {
-        registerEventListeners()
-        renderMenuScreen()
-    })
+    loadImages([backdrop.first.image, backdrop.second.image, runSprite, jumpSprite, platformSprite])
+        .then(() => {
+            return loadFonts([SyneMono])
+        })
+        .then(() => {
+            registerEventListeners()
+            renderMenuScreen()
+        })
 }
 
 function cleanStartGameLoop() {

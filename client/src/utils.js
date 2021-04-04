@@ -16,6 +16,14 @@ export function loadImages(images) {
     return Promise.all(imageLoadTasks)
 }
 
+export function loadFonts(fonts) {
+    const fontLoadTasks = fonts.map((font) => {
+        return font.load()
+    })
+
+    return Promise.all(fontLoadTasks)
+}
+
 export function fetchLeaderboard() {
     return sortEntries(mockLeaderboard)
 }

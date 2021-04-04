@@ -1,0 +1,39 @@
+body {
+    margin: 0;
+    padding: 0;
+    background-color: black;
+    font-family: 'Syne Mono';
+    color: white;
+}
+
+.game-container {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    justify-content: center;
+    align-items: center;
+}
+
+canvas {
+    height: auto;
+    width: 40%;
+}
+
+@media (max-width: 1080px) {
+    canvas {
+        width: 50%;
+    }
+}
+
+@media (max-width: 600px) {
+    canvas {
+        width: 90%;
+    }
+}
+
+@font-face {
+    font-family: 'Syne Mono';
+    src: url('./assets/fonts/SyneMono-Regular.ttf');
+    font-weight: 400;
+    font-style: normal;
+}
