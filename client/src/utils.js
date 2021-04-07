@@ -32,6 +32,10 @@ function sortEntries(entries) {
     return entries.sort((a, b) => b.score - a.score)
 }
 
-export function publishScore({ name, score }) {
+export async function publishScore({ name, score }) {
+    if (!score || isNaN(score)) {
+        return new Error('Invalid score')
+    }
+
     mockLeaderboard.push({ name, score })
 }

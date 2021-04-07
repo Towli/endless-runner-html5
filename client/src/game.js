@@ -10,8 +10,6 @@ import Player from './Player'
 import Font from './SyneMono-Regular.ttf'
 import './style.css'
 
-import './CanvasTextInput'
-
 import cityBackgroundSrc from './assets/city/bright/city.png'
 
 import runSpriteSrc from './assets/woodcutter/run.png'
@@ -21,25 +19,10 @@ import platformSpriteSrc from './assets/city/platform_tile.png'
 
 import audioSrc from './assets/hxc.mp3'
 
-const modal = document.querySelector('.publish-score-modal')
-const publishButton = document.querySelector('.publish-score-modal button')
-const nameInput = document.querySelector('.publish-score-modal input')
-
-nameInput &&
-    nameInput.addEventListener('keyup', (event) => {
-        if (event.keyCode === 13) {
-            event.preventDefault()
-            publishButton.click('test')
-        }
-    })
-
-publishButton &&
-    publishButton.addEventListener('click', (event, name) => {
-        console.log('publishing name', nameInput.value)
-        publishScore({ name: nameInput.value, score: game.bestScore })
-        nameInput.value = null
-        modal.style.display = 'none'
-    })
+const modal = document.querySelector('.modal')
+const publishButton = document.querySelector('button#publish')
+const backButton = document.querySelector('button#back')
+const nameInput = document.querySelector('.modal input')
 
 /**
 todo
@@ -83,9 +66,8 @@ const GAME_SCREEN = {
 const game = {
     fps: 0,
     state: GAME_STATES.IDLE,
-    bestScore: 0,
+    bestScore: null,
     firstUpdate: true,
-    audio: null,
     screen: null,
 }
 
@@ -257,6 +239,26 @@ function registerEventListeners() {
     document.addEventListener('keydown', handleKeydown)
     document.addEventListener('keyup', handleKeyup)
     document.addEventListener('touchstart', handleTouchStart)
+
+    nameInput.addEventListener('keyup', (event) => {
+        if (event.keyCode === 13) {
+            event.preventDefault()
+            publishButton.click()
+        }
+    })
+
+    publishButton.onclick = async () => {
+        await publishScore({ name: nameInput.value, score: game.bestScore }).catch(console.log)
+        nameInput.value = null
+        modal.style.display = 'none'
+        window.requestAnimationFrame(renderLeaderboard)
+    }
+
+    backButton.onclick = () => {
+        nameInput.value = null
+        modal.style.display = 'none'
+        window.requestAnimationFrame(renderLeaderboard)
+    }
 }
 
 function handleKeydown(e) {
@@ -267,20 +269,15 @@ function handleKeydown(e) {
     }
 
     if (game.state !== GAME_STATES.PLAYING) {
-        if (e.keyCode === KEYCODES.SPACE) {
-            return cleanStartGameLoop()
-        }
-
-        if (e.keyCode === KEYCODES.L) {
-            return renderLeaderboard()
-        }
-
-        if (e.keyCode === KEYCODES.P) {
-            return renderPublishScoreScreen()
-        }
-
-        if (e.keyCode === KEYCODES.M) {
-            return renderMenuScreen()
+        switch (e.keyCode) {
+            case KEYCODES.SPACE:
+                return cleanStartGameLoop()
+            case KEYCODES.L:
+                return renderLeaderboard()
+            case KEYCODES.P:
+                return renderPublishScoreScreen()
+            case KEYCODES.M:
+                return renderMenuScreen()
         }
     }
 }
@@ -587,31 +584,6 @@ function renderLeaderboard() {
     })
 
     drawHUD()
-}
-
-function renderInput(x, y) {
-    let test = new CanvasInput({
-        x,
-        y,
-        canvas,
-        fontSize: 16,
-        fontFamily: 'Syne Mono',
-        width: 100,
-        padding: 5,
-        borderRadius: 3,
-        borderWidth: 1,
-        borderColor: 'black',
-        backgroundColor: 'none',
-        selectionColor: 'none',
-        fontColor: '#fff',
-        boxShadow: 'none',
-        innerShadow: 'none',
-        maxlength: 4,
-        onsubmit: (e) => {
-            publishScore(e.target.value, game.bestScore)
-            // test = null
-        },
-    })
 }
 
 initialise()

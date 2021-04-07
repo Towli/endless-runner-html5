@@ -2,7 +2,7 @@ body {
     margin: 0;
     padding: 0;
     background-color: black;
-    font-family: 'Syne Mono';
+    font-family: 'Syne Mono' !important;
     color: white;
 }
 
@@ -19,15 +19,66 @@ canvas {
     width: 40%;
 }
 
-@media (max-width: 1080px) {
+.modal {
+    font-size: 2em;
+    position: absolute;
+    display: none;
+    width: 30vw;
+    height: 30vw;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: rgb(1, 1, 1, 0.8);
+}
+
+input:focus,
+button:focus {
+    outline: none;
+}
+
+input {
+    width: 33%;
+}
+
+button {
+    width: 33%;
+}
+
+input,
+button {
+    font-size: 1em;
+    padding: 0.5em;
+    margin-bottom: 5%;
+    text-align: center;
+    font-family: inherit;
+    border: none;
+    border-radius: 0.2em;
+}
+
+@media (max-width: 1024px) {
     canvas {
-        width: 50%;
+        width: 70%;
     }
 }
 
 @media (max-width: 600px) {
     canvas {
         width: 90%;
+    }
+
+    .modal {
+        font-size: 1em;
+        width: 60vw;
+        height: 60vw;
+    }
+
+    input,
+    button {
+        font-size: 0.9em;
+        width: 50%;
     }
 }
 
