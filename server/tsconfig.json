@@ -1,0 +1,10 @@
+{
+    "compilerOptions": {
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "module": "commonjs",
+        "target": "ES5",
+        "outDir": "./dist",
+        "rootDir": "."
+    }
+}
