@@ -29,10 +29,6 @@ export default class Platform extends GameObject {
 
     drawSprite() {
         const sprite = this.spriteSet['tile']
-
-        const width = sprite.width
-        const height = sprite.height
-
         this.context.drawImage(sprite, this.x, this.y, this.width, this.height)
     }
 }
