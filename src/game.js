@@ -6,11 +6,19 @@ import { CORE } from './constants'
 import Queue from './Queue'
 import Platform from './Platform'
 import Player from './Player'
+import Background from './Background'
 
 import Font from './SyneMono-Regular.ttf'
 import './style.css'
 
 import cityBackgroundSrc from './assets/city/bright/city.png'
+import boxesAndContainersSrc from './assets/city/bright/boxes_and_containers.png'
+import buildingsSrc from './assets/city/bright/buildings.png'
+import roadAndBorderSrc from './assets/city/bright/road_and_border.png'
+import skySrc from './assets/city/bright/sky.png'
+import wall1Src from './assets/city/bright/wall_1.png'
+import wall2Src from './assets/city/bright/wall_2.png'
+import wheelsAndHydrantSrc from './assets/city/bright/wheels_and_hydrant.png'
 
 import runSpriteSrc from './assets/woodcutter/run.png'
 import jumpSpriteSrc from './assets/woodcutter/jump.png'
@@ -45,8 +53,6 @@ current solution:
 - when drawing each frame, use a value copy of the platform queue to prevent rendering issues from 
 requeueing
  */
-
-const CanvasInput = window.CanvasInput
 
 const GAME_STATES = {
     WON: 1,
@@ -95,15 +101,15 @@ let canvas,
     animationFrameRequestId,
     player,
     background,
-    backgroundX = 0,
     runSprite,
     jumpSprite,
     fallSprite,
     platformSprite,
     lastFrameTimeInMs = 0,
-    maxFPS = 10,
+    _maxFPS = 10,
     delta = 0,
-    platformQueue
+    platformQueue,
+    backgroundImages
 
 function initialise() {
     canvas = document.getElementById('canvas')
@@ -119,6 +125,29 @@ function initialise() {
     backdrop.second.image = new Image()
     backdrop.second.image.src = cityBackgroundSrc
 
+    const backgroundImageSrcset = [
+        { label: 'sky', src: skySrc, velocity: 0.8 },
+        { label: 'buildings', src: buildingsSrc, velocity: 1.5 },
+        { label: 'wall2', src: wall2Src, velocity: 2.5 },
+        { label: 'wall1', src: wall1Src, velocity: 3 },
+        {
+            label: 'boxesAndContainers',
+            src: boxesAndContainersSrc,
+            velocity: 3,
+        },
+        { label: 'roadAndBorder', src: roadAndBorderSrc, velocity: 3 },
+        { label: 'wheelsAndHydrant', src: wheelsAndHydrantSrc, velocity: 3 },
+    ]
+
+    backgroundImages = backgroundImageSrcset.map((item) => {
+        const image = new Image()
+        image.src = item.src
+        return {
+            ...item,
+            image,
+        }
+    })
+
     runSprite = new Image()
     runSprite.src = runSpriteSrc
 
@@ -133,7 +162,14 @@ function initialise() {
 
     platformQueue = new Queue()
 
-    loadImages([backdrop.first.image, backdrop.second.image, runSprite, jumpSprite, platformSprite])
+    loadImages([
+        ...backgroundImages.map((img) => img.image),
+        backdrop.first.image,
+        backdrop.second.image,
+        runSprite,
+        jumpSprite,
+        platformSprite,
+    ])
         .then(() => {
             return loadFonts([SyneMono])
         })
@@ -147,6 +183,11 @@ function cleanStartGameLoop() {
     startMusic()
     game.screen = GAME_SCREEN.GAME
     game.firstUpdate = true
+
+    background = new Background(context)
+    backgroundImages.forEach((item) => {
+        background.addLayer({ image: item.image, velocity: item.velocity })
+    })
 
     player = new Player(context, 50, 30, CORE.PLAYER_WIDTH, CORE.PLAYER_HEIGHT)
     player.setSprite('run', runSprite)
@@ -200,16 +241,7 @@ function calculateMovement() {
         })
     })
 
-    if (backdrop.first.x + 896 < 0) {
-        backdrop.first.x = backdrop.second.x + 896
-    }
-
-    if (backdrop.second.x + 896 < 0) {
-        backdrop.second.x = backdrop.first.x + 896
-    }
-
-    backdrop.first.x -= 1
-    backdrop.second.x -= 1
+    background.move()
 }
 
 function handleCollisions() {
@@ -222,7 +254,7 @@ function handleCollisions() {
 function draw() {
     context.fillStyle = CORE.BG_COLOUR
     context.fillRect(0, 0, canvas.width, canvas.height)
-    drawBackground()
+    background.draw()
 
     // find better solution for this
     platformQueue
@@ -383,7 +415,7 @@ function renderMenuScreen() {
     context.textAlign = 'center'
     context.font = '24px Syne Mono'
     context.fillStyle = 'white'
-    context.fillText('RUNNA', canvas.width / 2, canvas.height / 3)
+    context.fillText('RUN THE STREETS', canvas.width / 2, canvas.height / 3)
     context.font = '16px Syne Mono'
     context.fillStyle = 'black'
     context.fillRect(canvas.width / 2 - 50, canvas.height / 2 - 20, 100, 30)
@@ -452,9 +484,9 @@ function drawOptions() {
         return
     }
 
-    context.fillText(`menu [M]`, canvas.width / 10, 20)
-    context.fillText(`publish [P]`, canvas.width / 2.9, 20)
-    context.fillText(`leaderboard [L]`, canvas.width / 1.5, 20)
+    context.fillText('menu [M]', canvas.width / 10, 20)
+    context.fillText('publish [P]', canvas.width / 2.9, 20)
+    context.fillText('leaderboard [L]', canvas.width / 1.5, 20)
 }
 
 function updateScore() {
@@ -493,18 +525,11 @@ function setBestScore() {
     }
 }
 
-function drawBackground() {
-    context.drawImage(backdrop.first.image, backdrop.first.x, 0, 896, 504)
-    context.drawImage(backdrop.second.image, backdrop.second.x, 0, 896, 504)
-}
-
 /**
     build an array of platform variations. not concerned about their positions 
     as this will get set at the poiint of enqueuing (based on the element in front)
  */
 function generatePlatformVariations(amount, sprite) {
-    const maxWidth = canvas.width
-    const minWidth = maxWidth / 3
     const platformHeight = 50 // fixed value for now
 
     const platforms = []
