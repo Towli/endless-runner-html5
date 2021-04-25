@@ -588,7 +588,16 @@ function requeuePlatform(queue) {
 function renderLeaderboard() {
     game.screen = GAME_SCREEN.LEADERBOARD
 
-    const entries = fetchLeaderboard()
+    fetchLeaderboard().then((entries) => {
+        entries.forEach((entry, index) => {
+            context.fillStyle = 'white'
+            context.fillText(
+                ` ${index + 1}       ${entry.score}     ${entry.name}`,
+                canvas.width / 2,
+                canvas.height / 3 + (index + 1) * 25
+            )
+        })
+    })
 
     context.fillStyle = CORE.BG_COLOUR
     context.fillRect(0, 0, canvas.width, canvas.height)
@@ -599,14 +608,6 @@ function renderLeaderboard() {
     context.fillText('HALL OF FAME', canvas.width / 2, canvas.height / 6)
     context.fillText('RANK   SCORE   NAME', canvas.width / 2, canvas.height / 3)
     context.font = '16px Syne Mono'
-
-    entries.forEach((entry, index) => {
-        context.fillText(
-            ` ${index + 1}       ${entry.score}     ${entry.name}`,
-            canvas.width / 2,
-            canvas.height / 3 + (index + 1) * 25
-        )
-    })
 
     drawHUD()
 }

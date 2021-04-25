@@ -16,4 +16,9 @@ export default class GameObject {
     setSprite(label, sprite) {
         this.spriteSet[label] = sprite
     }
+
+    resizeSprite(label, width, height) {
+        this.spriteSet[label].width = width
+        this.spriteSet[label].height = height
+    }
 }
